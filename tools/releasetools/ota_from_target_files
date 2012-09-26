@@ -56,6 +56,9 @@ Usage:  ota_from_target_files [flags] input_target_files output_ota_package
       the file contexts configuration used to assign SELinux file
       context attributes
 
+  --override_device <device>
+      Override device-specific asserts. Can be a comma-separated list.
+
 """
 
 import sys
@@ -93,6 +96,7 @@ OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
 OPTIONS.selinux_fc = None
+OPTIONS.override_device = 'auto'
 
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
@@ -314,7 +318,10 @@ def SignOutput(temp_zip_name, output_zip_name):
 
 
 def AppendAssertions(script, input_zip):
-  device = GetBuildProp("ro.product.device", input_zip)
+  if OPTIONS.override_device == "auto":
+    device = GetBuildProp("ro.product.device", input_zip)
+  else:
+    device = OPTIONS.override_device
   script.AssertDevice(device)
 
 
@@ -748,8 +755,13 @@ def main(argv):
         OPTIONS.aslr_mode = False
     elif o in ("--worker_threads"):
       OPTIONS.worker_threads = int(a)
+<<<<<<< HEAD
     elif o in ("-S", "--file_context"):
       OPTIONS.selinux_fc = a
+=======
+    elif o in ("--override_device"):
+      OPTIONS.override_device = a
+>>>>>>> 74db481... Added support for overriding of device asserts.
     else:
       return False
     return True
@@ -764,8 +776,12 @@ def main(argv):
                                               "extra_script=",
                                               "worker_threads=",
                                               "aslr_mode=",
+<<<<<<< HEAD
                                               "file_context=",
                                               ],
+=======
+                                              "override_device="],
+>>>>>>> 74db481... Added support for overriding of device asserts.
                              extra_option_handler=option_handler)
 
   if len(args) != 2:
