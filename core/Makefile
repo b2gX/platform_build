@@ -18,8 +18,6 @@ endif
 # src:dest pair is the first one to match the same dest"
 #$(1): the src:dest pair
 define check-product-copy-files
-$(if $(filter %.apk, $(1)),$(error \
-    Prebuilt apk found in PRODUCT_COPY_FILES: $(1), use BUILD_PREBUILT instead!))
 endef
 unique_product_copy_files_destinations :=
 $(foreach cf,$(PRODUCT_COPY_FILES), \
@@ -1226,17 +1224,16 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTATOOLS)
 	@echo "Package OTA: $@"
 	$(OTA_FROM_TARGET_SCRIPT) -v \
 	   -p $(HOST_OUT) \
-<<<<<<< HEAD
 	   -k $(KEY_CERT_PAIR) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
-=======
            -k $(KEY_CERT_PAIR) \
 	   --override_device=$(override_device) \
            $(BUILT_TARGET_FILES_PACKAGE) $@
->>>>>>> 74db481... Added support for overriding of device asserts.
 
-.PHONY: otapackage
+.PHONY: otapackage b2gx
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
+b2gx: otapackage
+	$(hide) ./vendor/b2gx/tools/squisher
 
 # -----------------------------------------------------------------
 # The update package
