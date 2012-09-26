@@ -119,7 +119,7 @@ function setpaths()
     case $(get_build_var TARGET_ARCH) in
         x86) toolchaindir=toolchain/i686-android-linux-4.4.3/bin
             ;;
-        arm|*) toolchaindir=toolchain/arm-linux-androideabi-4.4.x/bin
+        arm|*) toolchaindir=toolchain/arm-eabi-4.6.3/bin
             ;;
     esac
     if [ -d "$prebuiltdir/$toolchaindir" ]; then
