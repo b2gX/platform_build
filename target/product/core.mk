@@ -99,6 +99,9 @@ PRODUCT_PACKAGES := \
     busybox \
     screencap-gonk \
     sensorservice \
+    drmserver \
+    libdrmframework \
+    libdrmframework_jni \
     zoneinfo.dat \
     zoneinfo.idx \
     zoneinfo.version
