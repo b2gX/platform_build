@@ -18,6 +18,8 @@ endif
 # src:dest pair is the first one to match the same dest"
 #$(1): the src:dest pair
 define check-product-copy-files
+$(if $(filter %.apk, $(1)),$(error \
+    Prebuilt apk found in PRODUCT_COPY_FILES: $(1), use BUILD_PREBUILT instead!))
 endef
 unique_product_copy_files_destinations :=
 $(foreach cf,$(PRODUCT_COPY_FILES), \
@@ -141,7 +143,6 @@ $(if $(product_property_overrides_locale_region),,$(word 2, $(call default-local
 endef
 
 BUILDINFO_SH := build/tools/buildinfo.sh
-.PHONY: $(INSTALLED_BUILD_PROP_TARGET)
 $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(BUILD_SYSTEM)/version_defaults.mk $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
 	@echo Target buildinfo: $@
 	@mkdir -p $(dir $@)
@@ -168,8 +169,6 @@ $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(
 			TARGET_CPU_ABI="$(TARGET_CPU_ABI)" \
 			TARGET_CPU_ABI2="$(TARGET_CPU_ABI2)" \
 			TARGET_AAPT_CHARACTERISTICS="$(TARGET_AAPT_CHARACTERISTICS)" \
-			PLATFORM_VENDOR="$(PLATFORM_VENDOR)" \
-			$(PRODUCT_BUILD_PROP_OVERRIDES) \
 	        bash $(BUILDINFO_SH) > $@
 	$(hide) if [ -f $(TARGET_DEVICE_DIR)/system.prop ]; then \
 	          cat $(TARGET_DEVICE_DIR)/system.prop >> $@; \
@@ -390,13 +389,13 @@ $(INSTALLED_BOOTIMAGE_TARGET): $(MKEXT2IMG) $(INTERNAL_BOOTIMAGE_FILES)
 	$(call pretty,"Target boot image: $@")
 	$(hide) $(MKEXT2BOOTIMG) $(INTERNAL_BOOTIMAGE_ARGS) --output $@
 
-else ifndef BOARD_CUSTOM_BOOTIMG_MK # TARGET_BOOTIMAGE_USE_EXT2 != true
+else # TARGET_BOOTIMAGE_USE_EXT2 != true
 
 $(INSTALLED_BOOTIMAGE_TARGET): $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_FILES)
 	$(call pretty,"Target boot image: $@")
 	$(hide) $(MKBOOTIMG) $(INTERNAL_BOOTIMAGE_ARGS) --output $@
 	$(hide) $(call assert-max-image-size,$@,$(BOARD_BOOTIMAGE_PARTITION_SIZE),raw)
-endif # ifndef BOARD_CUSTOM_BOOTIMG_MK
+endif # TARGET_BOOTIMAGE_USE_EXT2
 
 else	# TARGET_NO_KERNEL
 # HACK: The top-level targets depend on the bootimage.  Not all targets
@@ -628,16 +627,6 @@ INTERNAL_USERIMAGES_DEPS := $(MKYAFFS2)
 endif
 
 # -----------------------------------------------------------------
-# Utility executables
-
-INTERNAL_UTILITY_FILES := $(filter $(PRODUCT_OUT)/utilities/%, \
-	$(foreach module, $(ALL_MODULES), $(ALL_MODULES.$(module).INSTALLED)) \
-	$(ALL_DEFAULT_INSTALLED_MODULES))
-
-.PHONY: utilities
-utilities: $(INTERNAL_UTILITY_FILES)
-
-# -----------------------------------------------------------------
 # Recovery image
 
 # If neither TARGET_NO_KERNEL nor TARGET_NO_RECOVERY are true
@@ -645,13 +634,8 @@ ifeq (,$(filter true, $(TARGET_NO_KERNEL) $(TARGET_NO_RECOVERY) $(BUILD_TINY_AND
 
 INSTALLED_RECOVERYIMAGE_TARGET := $(PRODUCT_OUT)/recovery.img
 
-ifneq ($(TARGET_RECOVERY_INITRC),)
-  recovery_initrc := $(TARGET_RECOVERY_INITRC) # Use target specific init.rc
-else
-  recovery_initrc := $(call include-path-for, recovery)/etc/init.rc
-endif
+recovery_initrc := $(call include-path-for, recovery)/etc/init.rc
 recovery_kernel := $(INSTALLED_KERNEL_TARGET) # same as a non-recovery system
-recovery_uncompressed_ramdisk := $(PRODUCT_OUT)/ramdisk-recovery.cpio
 recovery_ramdisk := $(PRODUCT_OUT)/ramdisk-recovery.img
 recovery_build_prop := $(INSTALLED_BUILD_PROP_TARGET)
 recovery_binary := $(call intermediates-dir-for,EXECUTABLES,recovery)/recovery
@@ -686,10 +670,6 @@ ifdef BOARD_KERNEL_PAGESIZE
   INTERNAL_RECOVERYIMAGE_ARGS += --pagesize $(BOARD_KERNEL_PAGESIZE)
 endif
 
-INTERNAL_RECOVERY_FILES := $(filter $(TARGET_RECOVERY_OUT)/%, \
-	$(foreach module, $(ALL_MODULES), $(ALL_MODULES.$(module).INSTALLED)) \
-	$(ALL_DEFAULT_INSTALLED_MODULES))
-
 # Keys authorized to sign OTA packages this build will accept.  The
 # build always uses dev-keys for this; release packaging tools will
 # substitute other keys for this one.
@@ -708,18 +688,17 @@ OTA_PUBLIC_KEYS := $(DEFAULT_SYSTEM_DEV_CERTIFICATE).x509.pem
 #	@mkdir -p $(dir $@)
 #	java -jar $(DUMPKEY_JAR) $(PRIVATE_OTA_PUBLIC_KEYS) $(extra_keys) > $@
 
-TARGET_RECOVERY_ROOT_TIMESTAMP := $(TARGET_RECOVERY_OUT)/root.ts
-
-$(TARGET_RECOVERY_ROOT_TIMESTAMP): $(INTERNAL_RECOVERY_FILES) \
+$(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(INSTALLED_BOOTIMAGE_TARGET) \
 		$(recovery_binary) \
-		$(recovery_initrc) \
+		$(recovery_initrc) $(recovery_kernel) \
 		$(INSTALLED_2NDBOOTLOADER_TARGET) \
 		$(recovery_build_prop) $(recovery_resource_deps) \
 		$(recovery_fstab) \
 		$(RECOVERY_INSTALL_OTA_KEYS)
-	@echo ----- Making recovery filesystem ------
+	@echo ----- Making recovery image ------
+	rm -rf $(TARGET_RECOVERY_OUT)
 	mkdir -p $(TARGET_RECOVERY_OUT)
 	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)
 	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/etc
@@ -728,10 +707,8 @@ $(TARGET_RECOVERY_ROOT_TIMESTAMP): $(INTERNAL_RECOVERY_FILES) \
 	cp -R $(TARGET_ROOT_OUT) $(TARGET_RECOVERY_OUT)
 	rm $(TARGET_RECOVERY_ROOT_OUT)/init*.rc
 	echo Modifying ramdisk contents...
-	cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/init.rc
+	cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
-	rm -f $(TARGET_RECOVERY_ROOT_OUT)/init.*.rc
-	mkdir -p $(TARGET_RECOVERY_ROOT_OUT)/system/bin
 	cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(foreach item,$(recovery_resources_private), \
 	  cp -rf $(item) $(TARGET_RECOVERY_ROOT_OUT)/)
@@ -740,28 +717,10 @@ $(TARGET_RECOVERY_ROOT_TIMESTAMP): $(INTERNAL_RECOVERY_FILES) \
 #	cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
 	cat $(INSTALLED_DEFAULT_PROP_TARGET) $(recovery_build_prop) \
 	        > $(TARGET_RECOVERY_ROOT_OUT)/default.prop
-	@echo ----- Made recovery filesystem -------- $(TARGET_RECOVERY_ROOT_OUT)
-	@touch $(TARGET_RECOVERY_ROOT_TIMESTAMP)
-
-$(recovery_uncompressed_ramdisk): $(MINIGZIP) \
-    $(TARGET_RECOVERY_ROOT_TIMESTAMP)
-	@echo ----- Making uncompressed recovery ramdisk ------
-	$(MKBOOTFS) $(TARGET_RECOVERY_ROOT_OUT) > $@
-
-$(recovery_ramdisk): $(MKBOOTFS) \
-    $(recovery_uncompressed_ramdisk)
-	@echo ----- Making recovery ramdisk ------
-	$(MINIGZIP) < $(recovery_uncompressed_ramdisk) > $@
-
-ifndef BOARD_CUSTOM_BOOTIMG_MK
-$(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTIMG) \
-		$(recovery_ramdisk) \
-		$(recovery_kernel)
-	@echo ----- Making recovery image ------
+	$(MKBOOTFS) $(TARGET_RECOVERY_ROOT_OUT) | $(MINIGZIP) > $(recovery_ramdisk)
 	$(MKBOOTIMG) $(INTERNAL_RECOVERYIMAGE_ARGS) --output $@
 	@echo ----- Made recovery image -------- $@
 	$(hide) $(call assert-max-image-size,$@,$(BOARD_RECOVERYIMAGE_PARTITION_SIZE),raw)
-endif
 
 else
 INSTALLED_RECOVERYIMAGE_TARGET :=
@@ -781,10 +740,6 @@ ifneq ($(BOARD_NAND_SPARE_SIZE),)
 mkyaffs2_extra_flags += -s $(BOARD_NAND_SPARE_SIZE)
 else
 BOARD_NAND_SPARE_SIZE := 64
-endif
-
-ifdef BOARD_CUSTOM_BOOTIMG_MK
-include $(BOARD_CUSTOM_BOOTIMG_MK)
 endif
 
 # -----------------------------------------------------------------
@@ -1209,32 +1164,16 @@ INTERNAL_OTA_PACKAGE_TARGET := $(PRODUCT_OUT)/$(name).zip
 
 $(INTERNAL_OTA_PACKAGE_TARGET): KEY_CERT_PAIR := $(DEFAULT_KEY_CERT_PAIR)
 
-ifeq ($(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT),)
-    OTA_FROM_TARGET_SCRIPT := ./build/tools/releasetools/ota_from_target_files
-else
-    OTA_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT)
-endif
-
-ifeq ($(TARGET_OTA_ASSERT_DEVICE),)
-    $(INTERNAL_OTA_PACKAGE_TARGET): override_device := auto
-else
-    $(INTERNAL_OTA_PACKAGE_TARGET): override_device := $(TARGET_OTA_ASSERT_DEVICE)
-endif
-
-$(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTATOOLS)
+$(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTATOOLS) $(SELINUX_DEPENDS)
 	@echo "Package OTA: $@"
-	$(OTA_FROM_TARGET_SCRIPT) -v \
+	$(hide) ./build/tools/releasetools/ota_from_target_files -v \
+	   $(if $(filter true, $(strip $(HAVE_SELINUX))),-S $(TARGET_ROOT_OUT)/file_contexts) \
 	   -p $(HOST_OUT) \
 	   -k $(KEY_CERT_PAIR) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
-           -k $(KEY_CERT_PAIR) \
-	   --override_device=$(override_device) \
-           $(BUILT_TARGET_FILES_PACKAGE) $@
 
-.PHONY: otapackage b2gx
+.PHONY: otapackage
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
-b2gx: otapackage
-	$(hide) ./vendor/b2gx/tools/squisher
 
 # -----------------------------------------------------------------
 # The update package
@@ -1254,15 +1193,9 @@ else
 $(INTERNAL_UPDATE_PACKAGE_TARGET): extensions := $(TARGET_RELEASETOOLS_EXTENSIONS)
 endif
 
-ifeq ($(TARGET_RELEASETOOL_IMG_FROM_TARGET_SCRIPT),)
-    IMG_FROM_TARGET_SCRIPT := ./build/tools/releasetools/img_from_target_files
-else
-    IMG_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_IMG_FROM_TARGET_SCRIPT)
-endif
-
-$(INTERNAL_UPDATE_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTATOOLS)
+$(INTERNAL_UPDATE_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTATOOLS) $(SELINUX_DEPENDS)
 	@echo "Package: $@"
-	$(IMG_FROM_TARGET_SCRIPT) -v \
+	$(hide) ./build/tools/releasetools/img_from_target_files -v \
 	   -s $(extensions) \
 	   -p $(HOST_OUT) \
 	   $(if $(filter true, $(strip $(HAVE_SELINUX))),-S $(TARGET_ROOT_OUT)/file_contexts) \

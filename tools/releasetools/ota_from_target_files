@@ -56,9 +56,6 @@ Usage:  ota_from_target_files [flags] input_target_files output_ota_package
       the file contexts configuration used to assign SELinux file
       context attributes
 
-  --override_device <device>
-      Override device-specific asserts. Can be a comma-separated list.
-
 """
 
 import sys
@@ -96,7 +93,6 @@ OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
 OPTIONS.selinux_fc = None
-OPTIONS.override_device = 'auto'
 
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
@@ -110,7 +106,7 @@ def MostPopularKey(d, default):
 def IsSymlink(info):
   """Return true if the zipfile.ZipInfo object passed in represents a
   symlink."""
-  return (info.external_attr >> 16) & 0770000 == 0120000
+  return (info.external_attr >> 16) == 0120777
 
 def IsRegular(info):
   """Return true if the zipfile.ZipInfo object passed in represents a
@@ -318,10 +314,7 @@ def SignOutput(temp_zip_name, output_zip_name):
 
 
 def AppendAssertions(script, input_zip):
-  if OPTIONS.override_device == "auto":
-    device = GetBuildProp("ro.product.device", input_zip)
-  else:
-    device = OPTIONS.override_device
+  device = GetBuildProp("ro.product.device", input_zip)
   script.AssertDevice(device)
 
 
@@ -389,6 +382,10 @@ def WriteFullOTAPackage(input_zip, output_zip):
       metadata=metadata,
       info_dict=OPTIONS.info_dict)
 
+  if not OPTIONS.omit_prereq:
+    ts = GetBuildProp("ro.build.date.utc", input_zip)
+    script.AssertOlderBuild(ts)
+
   AppendAssertions(script, input_zip)
   device_specific.FullOTA_Assertions()
 
@@ -402,6 +399,7 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   script.FormatPartition("/system")
   script.Mount("/system")
+  script.UnpackPackageDir("recovery", "/system")
   script.UnpackPackageDir("system", "/system")
 
   (symlinks, retouch_files) = CopySystemFiles(input_zip, output_zip)
@@ -413,11 +411,12 @@ def WriteFullOTAPackage(input_zip, output_zip):
 
   boot_img = common.GetBootableImage("boot.img", "boot.img",
                                      OPTIONS.input_tmp, "BOOT")
+  recovery_img = common.GetBootableImage("recovery.img", "recovery.img",
+                                         OPTIONS.input_tmp, "RECOVERY")
+  MakeRecoveryPatch(output_zip, recovery_img, boot_img)
 
   Item.GetMetadata(input_zip)
   Item.Get("system").SetPermissions(script)
-
-  script.SetPermissionsRecursive("/system/etc/init.d", 0, 2000, 0755, 0755)
 
   common.CheckSize(boot_img.data, "boot.img", OPTIONS.info_dict)
   common.ZipWriteStr(output_zip, "boot.img", boot_img.data)
@@ -554,7 +553,11 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT")
   updating_boot = (source_boot.data != target_boot.data)
 
-  updating_recovery = false
+  source_recovery = common.GetBootableImage(
+      "/tmp/recovery.img", "recovery.img", OPTIONS.source_tmp, "RECOVERY")
+  target_recovery = common.GetBootableImage(
+      "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
+  updating_recovery = (source_recovery.data != target_recovery.data)
 
   # Here's how we divide up the progress bar:
   #  0.1 for verifying the start state (PatchCheck calls)
@@ -693,6 +696,10 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     script.Print("Unpacking new files...")
     script.UnpackPackageDir("system", "/system")
 
+  if updating_recovery:
+    script.Print("Unpacking new recovery...")
+    script.UnpackPackageDir("recovery", "/system")
+
   script.Print("Symlinks and permissions...")
 
   # Create all the symlinks that don't already exist, or point to
@@ -757,13 +764,8 @@ def main(argv):
         OPTIONS.aslr_mode = False
     elif o in ("--worker_threads"):
       OPTIONS.worker_threads = int(a)
-<<<<<<< HEAD
     elif o in ("-S", "--file_context"):
       OPTIONS.selinux_fc = a
-=======
-    elif o in ("--override_device"):
-      OPTIONS.override_device = a
->>>>>>> 74db481... Added support for overriding of device asserts.
     else:
       return False
     return True
@@ -778,12 +780,8 @@ def main(argv):
                                               "extra_script=",
                                               "worker_threads=",
                                               "aslr_mode=",
-<<<<<<< HEAD
                                               "file_context=",
                                               ],
-=======
-                                              "override_device="],
->>>>>>> 74db481... Added support for overriding of device asserts.
                              extra_option_handler=option_handler)
 
   if len(args) != 2:

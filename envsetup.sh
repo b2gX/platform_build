@@ -5,7 +5,6 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - m:       Makes from the top of the tree.
 - mm:      Builds all of the modules in the current directory.
 - mmm:     Builds all of the modules in the supplied directories.
-- mka:     Builds using SCHED_BATCH on all processors.
 - cgrep:   Greps on all local C/C++ files.
 - jgrep:   Greps on all local Java files.
 - resgrep: Greps on all local res/*.xml files.
@@ -119,7 +118,7 @@ function setpaths()
     case $(get_build_var TARGET_ARCH) in
         x86) toolchaindir=toolchain/i686-android-linux-4.4.3/bin
             ;;
-        arm|*) toolchaindir=toolchain/arm-eabi-4.6.3/bin
+        arm|*) toolchaindir=toolchain/arm-linux-androideabi-4.4.x/bin
             ;;
     esac
     if [ -d "$prebuiltdir/$toolchaindir" ]; then
@@ -655,17 +654,6 @@ function mmm()
     fi
 }
 
-function mka() {
-    case `uname -s` in
-        Darwin)
-            make -j `sysctl hw.ncpu|cut -d" " -f2` "$@"
-            ;;
-        *)
-            schedtool -B -n 1 -e ionice -n 1 make -j `cat /proc/cpuinfo | grep "^processor" | wc -l` "$@"
-            ;;
-    esac
-}
-
 function croot()
 {
     T=$(gettop)
@@ -1053,15 +1041,6 @@ function godir () {
         pathname=${lines[0]}
     fi
     cd $T/$pathname
-}
-
-function repodiff() {
-    if [ -z "$*" ]; then
-        echo "Usage: repodiff <ref-from> [[ref-to] [--numstat]]"
-        return
-    fi
-    diffopts=$* repo forall -c \
-      'echo "$REPO_PATH ($REPO_REMOTE)"; git diff ${diffopts} 2>/dev/null ;'
 }
 
 # Force JAVA_HOME to point to java 1.6 if it isn't already set

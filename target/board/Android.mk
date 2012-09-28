@@ -22,8 +22,6 @@ endif
 
 -include $(TARGET_DEVICE_DIR)/AndroidBoard.mk
 
-include build/core/kernel.mk
-
 # Generate a file that contains various information about the
 # device we're building for.  This file is typically packaged up
 # with everything else.

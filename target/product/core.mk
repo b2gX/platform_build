@@ -98,13 +98,7 @@ PRODUCT_PACKAGES := \
     libz \
     busybox \
     screencap-gonk \
-    sensorservice \
-    drmserver \
-    libdrmframework \
-    libdrmframework_jni \
-    zoneinfo.dat \
-    zoneinfo.idx \
-    zoneinfo.version
+    sensorservice
 
 # host-only dependencies
 ifeq ($(WITH_HOST_DALVIK),true)
@@ -112,8 +106,5 @@ ifeq ($(WITH_HOST_DALVIK),true)
         apache-xml-hostdex \
         bouncycastle-hostdex \
         core-hostdex \
-        dalvik \
-        zoneinfo-host.dat \
-        zoneinfo-host.idx \
-        zoneinfo-host.version
+        dalvik
 endif

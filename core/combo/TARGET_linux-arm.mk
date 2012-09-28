@@ -44,7 +44,7 @@ include $(TARGET_ARCH_SPECIFIC_MAKEFILE)
 # You can set TARGET_TOOLS_PREFIX to get gcc from somewhere else
 ifeq ($(strip $(TARGET_TOOLS_PREFIX)),)
 TARGET_TOOLS_PREFIX := \
-	prebuilt/$(HOST_PREBUILT_TAG)/toolchain/arm-eabi-4.6.3/bin/arm-linux-androideabi-
+	prebuilt/$(HOST_PREBUILT_TAG)/toolchain/arm-linux-androideabi-4.4.x/bin/arm-linux-androideabi-
 endif
 
 # Only define these if there's actually a gcc in there.
@@ -118,7 +118,7 @@ TARGET_GLOBAL_CFLAGS += \
 # We cannot turn it off blindly since the option is not available
 # in gcc-4.4.x.  We also want to disable sincos optimization globally
 # by turning off the builtin sin function.
-ifneq ($(filter 4.6 4.6.%, $(shell $(TARGET_CC) --version)),)
+ifneq ($(filter 4.6.%, $(shell $(TARGET_CC) --version)),)
 TARGET_GLOBAL_CFLAGS += -Wno-unused-but-set-variable -fno-builtin-sin \
 			-fno-strict-volatile-bitfields
 endif
@@ -151,7 +151,7 @@ endif
 TARGET_GLOBAL_CPPFLAGS += -fvisibility-inlines-hidden
 
 # More flags/options can be added here
-TARGET_RELEASE_CFLAGS += \
+TARGET_RELEASE_CFLAGS := \
 			-DNDEBUG \
 			-g \
 			-Wstrict-aliasing=2 \
@@ -292,7 +292,7 @@ $(hide) $(PRIVATE_CXX) -nostdlib -Bdynamic -Wl,-T,$(BUILD_SYSTEM)/armelf.x \
 endef
 
 define transform-o-to-static-executable-inner
-$(hide) $(PRIVATE_CXX) -nostdlib -Bstatic -Wl,-T,$(BUILD_SYSTEM)/armelf.x \
+$(hide) $(PRIVATE_CXX) -nostdlib -Bstatic \
     -Wl,--gc-sections \
 	-o $@ \
 	$(TARGET_GLOBAL_LD_DIRS) \

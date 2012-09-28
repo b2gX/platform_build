@@ -60,7 +60,6 @@ endef
 #
 
 _product_var_list := \
-    PRODUCT_BUILD_PROP_OVERRIDES \
     PRODUCT_NAME \
     PRODUCT_MODEL \
     PRODUCT_LOCALES \
@@ -193,6 +192,7 @@ endef
 define resolve-short-product-name
 $(strip $(call _resolve-short-product-name,$(1)))
 endef
+
 
 _product_stash_var_list := $(_product_var_list) \
 	TARGET_ARCH \
